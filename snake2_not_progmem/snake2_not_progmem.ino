@@ -1,4 +1,5 @@
 #include <Adafruit_NeoPixel.h>
+#include <vector>
 
 #define PIN 19          // Define the pin to which your data line is connected
 #define NUMPIXELS 1024  // Define the number of LEDs in your strip
@@ -72,9 +73,11 @@ char movmentQueue[2] = { 'x', 'y' };
 char direction = 'x';
 
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
-int sLenghtControl[1024] = { 11, 8,   12, 8,   13, 8,   14, 8 };
-int x = sLenghtControl[0];  // Snake's head position column
-int y = sLenghtControl[1];  // Snake's head position row
+std::vector<int> sLengthControl = { 11, 8, 12, 8, 13, 8, 14, 8 }; // Define sLengthControl as a vector
+
+
+int x = sLengthControl[0];  // Snake's head position column
+int y = sLengthControl[1];  // Snake's head position row
 
 void setup() {
   pinMode(sensorPinDown, INPUT);
@@ -167,11 +170,10 @@ void loop() {
 
 void createSnake() {
   snakeSizeChecker();
-  Serial.println(snakeSize);
   // Dekrementuje i o 2 poniewaz setuje dwa pixele do matrixa z tabeli ktore sa zawsze obok siebie i oraz i-1
   for (int i = snakeSize - 1; i >= 0; i -= 2) {
-    strip.setPixelColor(twoDArray[sLenghtControl[i]][sLenghtControl[i - 1]], strip.Color((red * intensity) / 255, (green * intensity) / 255, (blue * intensity) / 255));
-    // Serial.println(twoDArray[sLenghtControl[i]][sLenghtControl[i-1]]);
+    strip.setPixelColor(twoDArray[sLengthControl[i]][sLengthControl[i - 1]], strip.Color((red * intensity) / 255, (green * intensity) / 255, (blue * intensity) / 255));
+    // Serial.println(twoDArray[sLengthControl[i]][sLengthControl[i-1]]);
     strip.show();
 
     if (twoDArray[y][x] == foodPosition) {
@@ -184,7 +186,7 @@ void createSnake() {
 }
 
 void snakeSizeChecker() {
-  snakeSize = sizeof(sLenghtControl) / sizeof(sLenghtControl[0]);
+ snakeSize = sLengthControl.size();
 }
 
 void food() {
@@ -192,7 +194,7 @@ void food() {
   if (!foodExists) {
     foodPosition = random(0, 1024);
     strip.setPixelColor(foodPosition, strip.Color((red * intensity) / 255, 0, 0));
-    // Serial.println(twoDArray[sLenghtControl[i]][sLenghtControl[i-1]]);
+    // Serial.println(twoDArray[sLengthControl[i]][sLengthControl[i-1]]);
     strip.show();
     foodExists = true;
     }
@@ -207,19 +209,19 @@ void move() {
   // Przesuniecie tabeli o dwie pozycje
   for (int i = snakeSize - 1; i > 1; --i) {
     if (i == snakeSize - 1) {
-      axisX = sLenghtControl[i - 1];  // Zapisuje wspolrzedne x diody do zgaszenia
-      axisY = sLenghtControl[i];      // Zapisuje wspolrzedne y diody do zgaszenia
+      axisX = sLengthControl[i - 1];  // Zapisuje wspolrzedne x diody do zgaszenia
+      axisY = sLengthControl[i];      // Zapisuje wspolrzedne y diody do zgaszenia
     }
 
-    sLenghtControl[i] = sLenghtControl[i - 2];
+    sLengthControl[i] = sLengthControl[i - 2];
   }
 
   checkForGameOver();     // Musi być przed ustaleniem nowych wsporzednych glowy bo inaczej nie zadziala
-  sLenghtControl[0] = x;  // Przypisuje nowe wspolrzedne x dla glowy
-  sLenghtControl[1] = y;  // Przypisuje nowe wspolrzedne y dla glowy
+  sLengthControl[0] = x;  // Przypisuje nowe wspolrzedne x dla glowy
+  sLengthControl[1] = y;  // Przypisuje nowe wspolrzedne y dla glowy
   if (twoDArray[y][x] == foodPosition) { //sprawdza czy głowa = jedzenie. jeśli tak to nie gasi diody tylko powiększa snejka
-    sLenghtControl[snakeSize] = axisX;
-    sLenghtControl[snakeSize+1] = axisY;
+    sLengthControl.push_back(axisX);
+    sLengthControl.push_back(axisY);
     snakeSizeChecker();
   }
   else turnOffLed(axisX, axisY);
@@ -249,9 +251,9 @@ void move_down() {
 }
 
 void checkForGameOver() {
-  int arraySize = sizeof(sLenghtControl) / sizeof(sLenghtControl[0]);
-  for (int i = arraySize - 1; i > 0; i -= 2) {
-    if (y == sLenghtControl[i] && x == sLenghtControl[i - 1])
+  snakeSizeChecker();
+  for (int i = snakeSize - 1; i > 0; i -= 2) {
+    if (y == sLengthControl[i] && x == sLengthControl[i - 1])
       Serial.println("game over");
   }
   if (twoDArray[y][x] == -1) {
@@ -260,12 +262,12 @@ void checkForGameOver() {
 }
 
 void turnOffLed(int axisX, int axisY) {
-  // int arraySize = sizeof(sLenghtControl) / sizeof(sLenghtControl[0]);
+  // int arraySize = sizeof(sLengthControl) / sizeof(sLengthControl[0]);
   // for (int i = arraySize - 1; i >= 0; i--) {
   //   Serial.print("Wartość na pozycji: ");
   //   Serial.print(i);
   //   Serial.print(" wynosi: ");
-  //   Serial.println(sLenghtControl[i]);
+  //   Serial.println(sLengthControl[i]);
   // }
   // Serial.print("Wygaszanie diody na pozycji x: ");
   // Serial.print(axisX);
