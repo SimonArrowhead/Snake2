@@ -1,35 +1,71 @@
+//e4:65:b8:78:d1:f6
+//todo
+//in progress - zmiana kolorów snejka
+//jeżeli następny ruch to ogon to nie powinno być gameover
+//zablokować ruch w przeciwnym kierunku do obecnego DONE
+//dodać kolejna matryce która wyświetli punktacje i komunikat gameover
+//fud czasami pojawia sie w miejscu gdzie jest snejk przez co jest niewidoczny bo kolor fud nadpisuje sie na kolor bialy
+//czy snejk powinien przyśpieszać?
+
 #include <Adafruit_NeoPixel.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_NeoMatrix.h>
 #include <vector>
+#include <Bluepad32.h>
+
+#ifndef PSTR
+#define PSTR  // Make Arduino Due happy
+#endif
+
+TaskHandle_t blinkingBorder;
 
 #define PIN 19          // Define the pin to which your data line is connected
 #define NUMPIXELS 1024  // Define the number of LEDs in your strip
+
+#define PIN2 26  // Define the pin to which your data line is connected
 //#define VELOCITY 10    // Speed of snake
 
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoMatrix pointsDisplay = Adafruit_NeoMatrix(32, 8, PIN2,
+                                                      NEO_MATRIX_BOTTOM + NEO_MATRIX_RIGHT + NEO_MATRIX_COLUMNS + NEO_MATRIX_ZIGZAG,
+                                                      NEO_GRB + NEO_KHZ800);
+
+const uint16_t colors[] = {
+  pointsDisplay.Color(255, 0, 0), pointsDisplay.Color(0, 255, 0), pointsDisplay.Color(0, 0, 255)
+};
+
 char currentDirection = ' ';  // Initialize to a non-movement state
+char previousDirection = ' ';
 int velocity = 0;
 bool foodExists = false;
 int snakeSize = 0;
 int foodPosition = random(0, 1024);
+bool gameOver = false;
+
+//screen refresh rate 100 is 10 times a second
+unsigned long previousMillis = 0;
+const long interval = 100;  // interval in milliseconds (1000 ms = 1 second)
 
 const int sensorPinDown = 16;
 const int sensorPinUp = 17;
 const int sensorPinLeft = 5;
 const int sensorPinRight = 18;
 
-// const int sensorPinDown = 3;
-// const int sensorPinUp = 2;
-// const int sensorPinLeft = 8;
-// const int sensorPinRight = 9;
-
-int intensity = 50;  // Set the intensity (brightness) of the LEDs (0-255)
+const int snakeIntensity = 25;  // Set Snake's snakeIntensity (brightness) of the LEDs (0-255)
+const int borderIntensity = 20;
 int red = 256;
 int green = 256;
 int blue = 256;
+int redBrightness;
+int greenBrightness;
+int blueBrightness;
+int z = pointsDisplay.width();
+int pass = 0;
 
 
 const int rows = 35;
 const int cols = 35;
-const int twoDArray[rows][cols] = {
+int twoDArray[rows][cols] = {
   { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 },
   { -1, 1016, 1015, 1000, 999, 984, 983, 968, 967, 952, 951, 936, 935, 920, 919, 904, 903, 888, 887, 872, 871, 856, 855, 840, 839, 824, 823, 808, 807, 792, 791, 776, 775, -1 },
   { -1, 1017, 1014, 1001, 998, 985, 982, 969, 966, 953, 950, 937, 934, 921, 918, 905, 902, 889, 886, 873, 870, 857, 854, 841, 838, 825, 822, 809, 806, 793, 790, 777, 774, -1 },
@@ -69,228 +105,198 @@ const int twoDArray[rows][cols] = {
   { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 }
 };
 
+int edgeValues[128] = { 7, 8, 23, 24, 39, 40, 55, 56, 71, 72, 87, 88, 103, 104, 119, 120, 135, 136, 151, 152, 167, 168, 183, 184, 199, 200, 215, 216, 231, 232, 247, 248,
+                        1015, 1000, 999, 984, 983, 968, 967, 952, 951, 936, 935, 920, 919, 904, 903, 888, 887, 872, 871, 856, 855, 840, 839, 824, 823, 808, 807, 792, 791, 776, 775,
+                        1016, 1017, 1018, 1019, 1020, 1021, 1022, 1023, 512, 513, 514, 515, 516, 517, 518, 519, 504, 505, 506, 507, 508, 509, 510, 511, 0, 1, 2, 3, 4, 5, 6, 7,
+                        775, 774, 773, 772, 771, 770, 769, 768, 767, 766, 765, 764, 763, 762, 761, 760, 263, 262, 261, 260, 259, 258, 257, 256, 255, 254, 253, 252, 251, 250, 249, 248 };
+
 char movmentQueue[2] = { 'x', 'y' };
-char direction = 'x';
+char pressedDirection = 'x';
 
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
-std::vector<int> sLengthControl = { 11, 8, 12, 8, 13, 8, 14, 8 }; // Define sLengthControl as a vector
-
+std::vector<int> sLengthControl = { 11, 8, 12, 8, 13, 8 };
+std::vector<int> sResetValues = { 11, 8, 12, 8, 13, 8 };  // Define sLengthControl as a vector
+std::vector<int> matrixCopy;                              // Define sLengthControl as a vector
 
 int x = sLengthControl[0];  // Snake's head position column
 int y = sLengthControl[1];  // Snake's head position row
 
-void setup() {
-  pinMode(sensorPinDown, INPUT);
-  pinMode(sensorPinUp, INPUT);
-  pinMode(sensorPinLeft, INPUT);
-  pinMode(sensorPinRight, INPUT);
-  strip.begin();
-  strip.show();  // Initialize all pixels to 'off'
-  Serial.begin(115200);
-  // Create snake
-  createSnake();
-}
 
-void loop() {
-  int sensorValueDown = digitalRead(sensorPinDown);
-  int sensorValueUp = digitalRead(sensorPinUp);
-  int sensorValueLeft = digitalRead(sensorPinLeft);
-  int sensorValueRight = digitalRead(sensorPinRight);
-
-
-  // Turn on one LED at a time with random color and specified intensity
-  // Check if the sensor pin is HIGH
-  if (sensorValueDown == HIGH) {
-    // Print a message to the Serial Monitor
-    Serial.println("High signal detected on pin Down!");
-    direction = 'D';
-    delay(15);  // Add a delay to avoid repeated messages (adjust as needed)
-  } else if (sensorValueUp == HIGH) {
-    // Print a message to the Serial Monitor
-    Serial.println("High signal detected on Up!");
-    direction = 'U';
-    delay(15);  // Add a delay to avoid repeated messages (adjust as needed)
-  } else if (sensorValueLeft == HIGH) {
-    // Print a message to the Serial Monitor
-    Serial.println("High signal detected on Left!");
-    direction = 'L';
-    delay(15);  // Add a delay to avoid repeated messages (adjust as needed)
-  } else if (sensorValueRight == HIGH) {
-    // Print a message to the Serial Monitor
-    Serial.println("High signal detected on Right!");
-    direction = 'R';
-    delay(15);
-  }
-
-  //przechodzi 20 razy zanim zacznie resetować pozycje x dlatego wchodzi zawsze w else if zanim wywoła if z movementem
-
-  if (movmentQueue[0] == 'x') {
-    movmentQueue[0] = direction;
-  } else if (movmentQueue[0] != direction) {
-    movmentQueue[1] = direction;
-  }
-
-  //to jest tragiczne..................................... o7
-
-
-
-  if (velocity % 5 == 0) {
-
-    if (movmentQueue[0] != 'x') {
-      setDirection(movmentQueue[0]);
-      performMovement();
-      movmentQueue[0] = 'x';
-    }
-
-    if (movmentQueue[1] != 'y') {
-      setDirection(movmentQueue[1]);
-      performMovement();
-      movmentQueue[1] = 'y';
-    }
-    velocity = 0;
-  }
-
-  velocity++;
-  delay(5);  // Adjust the delay as needed
-
-  // if (x >= lenght) {
-
-  // Turn off the first LED if GROUP_SIZE LEDs are already on
-  //   Serial.print("Clear: ");
-  //   Serial.println(twoDArray[y][x - lenght]);
-  //   strip.setPixelColor(twoDArray[y][x - lenght] , strip.Color(0, 0, 0));  // Black color turns off the LED
-  //   delay(100);
-  // }
-
-  // Turn off all LEDs
-  // for (int i = 0; i < NUMPIXELS; i++) {
-  //   strip.setPixelColor(i, strip.Color(0, 0, 0));  // Black color turns off the LED
-  // }
-}
-
-void createSnake() {
-  snakeSizeChecker();
-  // Dekrementuje i o 2 poniewaz setuje dwa pixele do matrixa z tabeli ktore sa zawsze obok siebie i oraz i-1
-  for (int i = snakeSize - 1; i >= 0; i -= 2) {
-    strip.setPixelColor(twoDArray[sLengthControl[i]][sLengthControl[i - 1]], strip.Color((red * intensity) / 255, (green * intensity) / 255, (blue * intensity) / 255));
-    // Serial.println(twoDArray[sLengthControl[i]][sLengthControl[i-1]]);
-    strip.show();
-
-    if (twoDArray[y][x] == foodPosition) {
-      foodExists = false;
-
-    
-    }
-    food();
-  }
-}
 
 void snakeSizeChecker() {
- snakeSize = sLengthControl.size();
+  snakeSize = sLengthControl.size();
+}
+
+// Function to calculate brightness based on current value of i
+int calculateBorderBrightness(int i) {
+  return 256 * i / 255;  // Calculate brightness value between 0 and 255
+}
+
+void calculateSnakeBrightness() {
+  redBrightness = red * snakeIntensity / 255;
+  greenBrightness = green * snakeIntensity / 255;
+  blueBrightness = blue * snakeIntensity / 255;
 }
 
 void food() {
 
-  if (!foodExists) {
+  if (twoDArray[y][x] == foodPosition) {
+    foodExists = false;
+  }
+
+  while (!foodExists) {
     foodPosition = random(0, 1024);
-    strip.setPixelColor(foodPosition, strip.Color((red * intensity) / 255, 0, 0));
-    // Serial.println(twoDArray[sLengthControl[i]][sLengthControl[i-1]]);
-    strip.show();
+    for (int i = 0; i < 128; i++) { //jeśli wylosuje jedzenie na ramce to losuje jeszcze raz aż do skutku
+      if (foodPosition == edgeValues[i]) { 
+        foodPosition = random(0, 1024);
+        i = 0;
+      }
+    }
     foodExists = true;
+    strip.setPixelColor(foodPosition, strip.Color(redBrightness, 0, 0));
+
+  }
+}
+
+void createSnake() {
+  snakeSizeChecker();  //przy pierwszy przebiegu sprawdza wielkość snake'a (na starcie ma 0 więc warto to aktualizować przed wywołaniem dalszej komendy)
+
+  // Dekrementuje i o 2 poniewaz setuje dwa pixele do matrixa z tabeli ktore sa zawsze obok siebie i oraz i-1
+  for (int i = snakeSize - 1; i >= 0; i -= 2) {
+    if (i > 1) {
+      strip.setPixelColor(twoDArray[sLengthControl[i]][sLengthControl[i - 1]], strip.Color(redBrightness, greenBrightness, blueBrightness));
+    } else {
+      strip.setPixelColor(twoDArray[sLengthControl[i]][sLengthControl[i - 1]], strip.Color(redBrightness, greenBrightness, blueBrightness));
+      //po co to jest dwa razy????????????????????????????????????????????????????????????
     }
-}
-
-void move() {
-  int axisX = 0;
-  int axisY = 0;
-
-  // Ustalenie rozmiaru tabeli
-  snakeSizeChecker();
-  // Przesuniecie tabeli o dwie pozycje
-  for (int i = snakeSize - 1; i > 1; --i) {
-    if (i == snakeSize - 1) {
-      axisX = sLengthControl[i - 1];  // Zapisuje wspolrzedne x diody do zgaszenia
-      axisY = sLengthControl[i];      // Zapisuje wspolrzedne y diody do zgaszenia
-    }
-
-    sLengthControl[i] = sLengthControl[i - 2];
-  }
-
-  checkForGameOver();     // Musi być przed ustaleniem nowych wsporzednych glowy bo inaczej nie zadziala
-  sLengthControl[0] = x;  // Przypisuje nowe wspolrzedne x dla glowy
-  sLengthControl[1] = y;  // Przypisuje nowe wspolrzedne y dla glowy
-  if (twoDArray[y][x] == foodPosition) { //sprawdza czy głowa = jedzenie. jeśli tak to nie gasi diody tylko powiększa snejka
-    sLengthControl.push_back(axisX);
-    sLengthControl.push_back(axisY);
-    snakeSizeChecker();
-  }
-  else turnOffLed(axisX, axisY);
-
-  createSnake();
-}
-
-//poprawić kierunki bo po odwróceniu matrixa nazwy metod nie odpowiadają kierunkom na matrycy
-void move_right() {
-  x += 1;
-  move();
-}
-
-void move_left() {
-  x -= 1;
-  move();
-}
-
-void move_up() {
-  y -= 1;
-  move();
-}
-
-void move_down() {
-  y += 1;
-  move();
-}
-
-void checkForGameOver() {
-  snakeSizeChecker();
-  for (int i = snakeSize - 1; i > 0; i -= 2) {
-    if (y == sLengthControl[i] && x == sLengthControl[i - 1])
-      Serial.println("game over");
-  }
-  if (twoDArray[y][x] == -1) {
-    Serial.println("game over");
   }
 }
 
 void turnOffLed(int axisX, int axisY) {
-  // int arraySize = sizeof(sLengthControl) / sizeof(sLengthControl[0]);
-  // for (int i = arraySize - 1; i >= 0; i--) {
-  //   Serial.print("Wartość na pozycji: ");
-  //   Serial.print(i);
-  //   Serial.print(" wynosi: ");
-  //   Serial.println(sLengthControl[i]);
-  // }
-  // Serial.print("Wygaszanie diody na pozycji x: ");
-  // Serial.print(axisX);
-  // Serial.print(" or y: ");
-  // Serial.println(axisY);
-  // Serial.print("O numerze: ");
-  // Serial.println(twoDArray[axisY][axisX]);
-
   strip.setPixelColor(twoDArray[axisY][axisX], strip.Color(0, 0, 0));
+}
+
+void move() {
+  snakeSizeChecker();
+  int axisX = sLengthControl[snakeSize - 2];         //zapisuje kolumnę ogona do zmiennej axisX
+  int axisY = sLengthControl[snakeSize - 1];         //zapisuje rząd ogona do zmiennej axisY
+  sLengthControl.insert(sLengthControl.begin(), y);  //wstawia nowy rząd głowy po wykonanym ruchu do zmeinnej y
+  sLengthControl.insert(sLengthControl.begin(), x);  //wstawia nową kolumnę głowy po wykonanym ruchu do zmeinnej x
+
+  if (twoDArray[y][x] == foodPosition) {  //sprawdza, czy głowa = jedzenie. jeśli tak to nie gasi diody tylko powiększa snejka
+    snakeSizeChecker();
+
+  } else {
+    twoDArray[axisY][axisX] = matrixCopy.back();  //przywraca wartość w matrixie z -1 na oryginalna
+    turnOffLed(axisX, axisY);
+    sLengthControl.pop_back();  //usuwa y z kontrolnej tabeli dlugosci
+    sLengthControl.pop_back();  //usuwa x z kontrolnej tabeli dlugosci
+    matrixCopy.pop_back();      //usuwa ostatnią wartość z kopii tymczasowej ponieważ już została przywrócona do matrixa
+    snakeSizeChecker();
+  }
+
+
+  food();  //checks if theres food on the board and if not creates it
+
+  strip.setPixelColor(twoDArray[y][x], strip.Color(redBrightness, greenBrightness, blueBrightness));  //zapala kolejna diode
+  //strip.show();
+
+  matrixCopy.insert(matrixCopy.begin(), twoDArray[y][x]);  //kopia wartości z matrixa do tablicy tymczasowej
+  twoDArray[y][x] = -1;                                    //zmiana w matrixie pozycji glowy na -1
+}
+
+bool checkForGameOver() {
+  snakeSizeChecker();
+  if (twoDArray[y][x] == -1) {
+    Serial.println("game over");
+    gameOver = true;
+    currentDirection = ' ';
+
+    return true;
+  }
+  return false;
+}
+
+void gameReset() {
+  int j = 0;
+  for (int i = 0; i <= snakeSize - 1; i += 2) {
+    twoDArray[sLengthControl[i + 1]][sLengthControl[i]] = matrixCopy[j];                             //przywracamy współrzędne do tablicy 2d z -1 na właściwe
+    strip.setPixelColor(twoDArray[sLengthControl[i + 1]][sLengthControl[i]], strip.Color(0, 0, 0));  //gasimy stare diody
+    j++;
+  }
+
+  matrixCopy.clear();             //czyścimy kopię starych współrzędnych
+  sLengthControl = sResetValues;  //przywracamy początkową tabelę snejka
+  createSnake();                  //tworzymy snejka na początkowych wartościach
+  food();                         //tworzymy jedzonko
+
+  for (int i = 0; i <= snakeSize - 1; i += 2) {  //podmieniamy wspórzędne pozycji snejka na matrixie na -1 i kopiujemy te wartości przed podmianą do matrixCopy
+    matrixCopy.push_back(twoDArray[sLengthControl[i + 1]][sLengthControl[i]]);
+    twoDArray[sLengthControl[i + 1]][sLengthControl[i]] = -1;  //przez zmiane wartosci na -1 przestanie dzialac turn off - trzeba poprawic
+  }
+
+  x = sLengthControl[0];  // Snake's head position column
+  y = sLengthControl[1];  // Snake's head position row
+
+  gameOver = false;
+  currentDirection == ' ';
+}
+
+void move_right() {
+  strip.setPixelColor(twoDArray[y][x], strip.Color(redBrightness, greenBrightness, blueBrightness));
+  x += 1;
+  if (checkForGameOver()) {
+
+  } else move();
+}
+
+void move_left() {
+  strip.setPixelColor(twoDArray[y][x], strip.Color(redBrightness, greenBrightness, blueBrightness));
+  x -= 1;
+  if (checkForGameOver()) {
+
+  } else move();
+}
+
+void move_up() {
+  strip.setPixelColor(twoDArray[y][x], strip.Color(redBrightness, greenBrightness, blueBrightness));
+  y -= 1;
+  if (checkForGameOver()) {
+
+  } else move();
+}
+
+void move_down() {
+  strip.setPixelColor(twoDArray[y][x], strip.Color(redBrightness, greenBrightness, blueBrightness));
+  y += 1;
+  if (checkForGameOver()) {
+
+  } else move();
 }
 
 void setDirection(char incomingByte) {
   switch (incomingByte) {
     case 'U':
+      if (currentDirection == 'D') {
+        break;
+      }
       currentDirection = 'U';
       break;
     case 'D':
+      if (currentDirection == 'U') {
+        break;
+      }
       currentDirection = 'D';
       break;
     case 'R':
+      if (currentDirection == 'L') {
+        break;
+      }
       currentDirection = 'R';
       break;
     case 'L':
+      if (currentDirection == 'R') {
+        break;
+      }
       currentDirection = 'L';
       break;
       // Add cases for 'L' and 'R' for Left and Right arrows
@@ -316,4 +322,352 @@ void performMovement() {
       // Stop movement or perform other actions for the default state
       break;
   }
+}
+
+void printMatrix() {
+  for (int i = 0; i < 34; i++) {
+    Serial.println();
+    for (int j = 0; j < 34; j++) {
+      if (j == 0) {
+        Serial.print(twoDArray[i][j]);
+        Serial.print("   ");
+      } else if (j == 33) {
+        Serial.print("   ");
+        Serial.print(twoDArray[i][j]);
+        Serial.print(";");
+      } else {
+        Serial.print(twoDArray[i][j]);
+        if (j != 32) {
+          Serial.print(", ");
+        }
+      }
+    }
+    if (i % 8 == 0) {
+      Serial.println();
+    }
+  }
+}
+
+
+
+//controller settings
+ControllerPtr myControllers[BP32_MAX_GAMEPADS];
+
+// This callback gets called any time a new gamepad is connected.
+// Up to 4 gamepads can be connected at the same time.
+void onConnectedController(ControllerPtr ctl) {
+  bool foundEmptySlot = false;
+  for (int i = 0; i < BP32_MAX_GAMEPADS; i++) {
+    if (myControllers[i] == nullptr) {
+      Serial.printf("CALLBACK: Controller is connected, index=%d\n", i);
+      // Additionally, you can get certain gamepad properties like:
+      // Model, VID, PID, BTAddr, flags, etc.
+      ControllerProperties properties = ctl->getProperties();
+      Serial.printf("Controller model: %s, VID=0x%04x, PID=0x%04x\n", ctl->getModelName().c_str(), properties.vendor_id,
+                    properties.product_id);
+      myControllers[i] = ctl;
+      foundEmptySlot = true;
+      break;
+    }
+  }
+  if (!foundEmptySlot) {
+    Serial.println("CALLBACK: Controller connected, but could not found empty slot");
+  }
+}
+
+
+void onDisconnectedController(ControllerPtr ctl) {
+  bool foundController = false;
+
+  for (int i = 0; i < BP32_MAX_GAMEPADS; i++) {
+    if (myControllers[i] == ctl) {
+      Serial.printf("CALLBACK: Controller disconnected from index=%d\n", i);
+      myControllers[i] = nullptr;
+      foundController = true;
+      break;
+    }
+  }
+
+  if (!foundController) {
+    Serial.println("CALLBACK: Controller disconnected, but not found in myControllers");
+  }
+}
+
+void dumpGamepad(ControllerPtr ctl) {
+  Serial.printf(
+    "idx=%d, dpad: 0x%02x, buttons: 0x%04x, axis L: %4d, %4d, axis R: %4d, %4d, brake: %4d, throttle: %4d, "
+    "misc: 0x%02x, gyro x:%6d y:%6d z:%6d, accel x:%6d y:%6d z:%6d\n",
+    ctl->index(),        // Controller Index
+    ctl->dpad(),         // D-pad
+    ctl->buttons(),      // bitmask of pressed buttons
+    ctl->axisX(),        // (-511 - 512) left X Axis
+    ctl->axisY(),        // (-511 - 512) left Y axis
+    ctl->axisRX(),       // (-511 - 512) right X axis
+    ctl->axisRY(),       // (-511 - 512) right Y axis
+    ctl->brake(),        // (0 - 1023): brake button
+    ctl->throttle(),     // (0 - 1023): throttle (AKA gas) button
+    ctl->miscButtons(),  // bitmask of pressed "misc" buttons
+    ctl->gyroX(),        // Gyro X
+    ctl->gyroY(),        // Gyro Y
+    ctl->gyroZ(),        // Gyro Z
+    ctl->accelX(),       // Accelerometer X
+    ctl->accelY(),       // Accelerometer Y
+    ctl->accelZ()        // Accelerometer Z
+  );
+}
+
+void processGamepad(ControllerPtr ctl) {
+  // There are different ways to query whether a button is pressed.
+  // By query each button individually:
+  //  a(), b(), x(), y(), l1(), etc...
+  if (ctl->a()) {
+    static int colorIdx = 0;
+    // Some gamepads like DS4 and DualSense support changing the color LED.
+    // It is possible to change it by calling:
+    switch (colorIdx % 3) {
+      case 0:
+        // Red
+        ctl->setColorLED(255, 0, 0);
+        break;
+      case 1:
+        // Green
+        ctl->setColorLED(0, 255, 0);
+        break;
+      case 2:
+        // Blue
+        ctl->setColorLED(0, 0, 255);
+        break;
+    }
+    colorIdx++;
+  }
+
+  if (ctl->b()) {
+    // Turn on the 4 LED. Each bit represents one LED.
+    static int led = 0;
+    led++;
+    // Some gamepads like the DS3, DualSense, Nintendo Wii, Nintendo Switch
+    // support changing the "Player LEDs": those 4 LEDs that usually indicate
+    // the "gamepad seat".
+    // It is possible to change them by calling:
+    ctl->setPlayerLEDs(led & 0x0f);
+  }
+
+  if (ctl->x()) {
+    // Some gamepads like DS3, DS4, DualSense, Switch, Xbox One S, Stadia support rumble.
+    // It is possible to set it by calling:
+    // Some controllers have two motors: "strong motor", "weak motor".
+    // It is possible to control them independently.
+    ctl->playDualRumble(0 /* delayedStartMs */, 250 /* durationMs */, 0x80 /* weakMagnitude */,
+                        0x40 /* strongMagnitude */);
+  }
+
+  // Another way to query controller data is by getting the buttons() function.
+  // See how the different "dump*" functions dump the Controller info.
+
+  if (ctl->dpad() == 0x02) {
+    pressedDirection = 'D';
+    printf("DOWN ");
+  } else if (ctl->dpad() == 0x01) {
+    pressedDirection = 'U';
+    printf("UP ");
+  } else if (ctl->dpad() == 0x04) {
+    pressedDirection = 'R';
+    printf("RIGHT ");
+  } else if (ctl->dpad() == 0x08) {
+    pressedDirection = 'L';
+    printf("LEFT ");
+  } else pressedDirection = ' ';
+  //dumpGamepad(ctl);
+}
+
+void processControllers() {
+  for (auto myController : myControllers) {
+    if (myController && myController->isConnected() && myController->hasData()) {
+      if (myController->isGamepad()) {
+        processGamepad(myController);
+      } else {
+        Serial.println("Unsupported controller");
+      }
+    }
+  }
+}
+
+void setup() {
+  pinMode(sensorPinDown, INPUT);
+  pinMode(sensorPinUp, INPUT);
+  pinMode(sensorPinLeft, INPUT);
+  pinMode(sensorPinRight, INPUT);
+  strip.begin();
+  Serial.begin(115200);
+
+  //Initialize points display
+  pointsDisplay.begin();
+  pointsDisplay.show();
+  pointsDisplay.setTextWrap(false);
+  pointsDisplay.setBrightness(40);
+  pointsDisplay.setTextColor(colors[0]);
+  calculateSnakeBrightness();
+
+  BP32.setup(&onConnectedController, &onDisconnectedController);
+
+  // "forgetBluetoothKeys()" should be called when the user performs
+  // a "device factory reset", or similar.
+  // Calling "forgetBluetoothKeys" in setup() just as an example.
+  // Forgetting Bluetooth keys prevents "paired" gamepads to reconnect.
+  // But it might also fix some connection / re-connection issues.
+  BP32.forgetBluetoothKeys();
+
+  xTaskCreatePinnedToCore(
+    blinkingBorderCode, /* Task function. */
+    "blinkingBorder",   /* name of task. */
+    10000,              /* Stack size of task */
+    NULL,               /* parameter of the task */
+    1,                  /* priority of the task */
+    &blinkingBorder,    /* Task handle to keep track of created task */
+    0);                 /* pin task to core 0 */
+
+  //incjalizacja ramki
+  for (int j = 0; j < 128; j++) {
+    strip.setPixelColor(edgeValues[j], strip.Color((red * borderIntensity) / 255, 0, 0));
+  }
+
+  // Create snake
+  createSnake();
+  strip.show();  //Initialize all pixels
+  //podmiana pierwszych współrzędnych snejka na -1
+  for (int i = 0; i <= snakeSize - 1; i += 2) {
+    matrixCopy.push_back(twoDArray[sLengthControl[i + 1]][sLengthControl[i]]);
+    twoDArray[sLengthControl[i + 1]][sLengthControl[i]] = -1;  //przez zmiane wartosci na -1 przestanie dzialac turn off - trzeba poprawic
+  }
+}
+
+//blinkingBorder: blinks a border
+void blinkingBorderCode(void* pvParameters) {
+  Serial.print("Border running on core ");
+  Serial.println(xPortGetCoreID());
+
+  for (;;) {
+    for (int i = 0; i < borderIntensity; i++) {
+      int borderBrightness = calculateBorderBrightness(i);
+      for (int j = 0; j < 128; j++) {
+        strip.setPixelColor(edgeValues[j], strip.Color(borderBrightness, 0, 0));
+      }
+      vTaskDelay(pdMS_TO_TICKS(100));  // Add delay using FreeRTOS function
+      // strip.show();
+    }
+    for (int i = 20; i > 0; i--) {
+      int borderBrightness = calculateBorderBrightness(i);
+      for (int j = 0; j < 128; j++) {
+        strip.setPixelColor(edgeValues[j], strip.Color(borderBrightness, 0, 0));
+      }
+      vTaskDelay(pdMS_TO_TICKS(100));  // Add delay using FreeRTOS function
+      // strip.show();
+    }
+  }
+}
+
+bool newDirection(char previousValue, char currentValue) {
+  if (previousValue != currentValue) {
+    return true;
+  } else return false;
+}
+
+void loop() {
+  // Serial.print("loop() running on core ");
+  // Serial.println(xPortGetCoreID());
+  int sensorValueDown = digitalRead(sensorPinDown);
+  int sensorValueUp = digitalRead(sensorPinUp);
+  int sensorValueLeft = digitalRead(sensorPinLeft);
+  int sensorValueRight = digitalRead(sensorPinRight);
+
+  strip.show();
+  previousDirection = pressedDirection;
+  bool dataUpdated = BP32.update();
+  if (dataUpdated)
+    processControllers();
+
+  if (gameOver) {
+    printf("press button to reset");
+    delay(200);  //delay aby w razie spamowania przycisków nie resetować przypadkowo po gameover
+    while (currentDirection == ' ') {
+      dataUpdated = BP32.update();
+      if (dataUpdated)
+        processControllers();
+      setDirection(pressedDirection);
+      printf("game over while loop");
+      pointsDisplay.fillScreen(0);
+      pointsDisplay.setCursor(z, 0);
+      pointsDisplay.print(F("Game Over - press any button"));
+      if (--z < -144) {
+        z = pointsDisplay.width();
+        if (++pass >= 3) pass = 0;
+        pointsDisplay.setTextColor(colors[pass]);
+      }
+      pointsDisplay.show();
+      delay(100);
+    }
+    gameReset();
+  }
+
+
+  if (newDirection(pressedDirection, previousDirection) && pressedDirection != ' ') {
+    setDirection(pressedDirection);
+    printf("setting new direction");
+  }
+
+  if (velocity % 3 == 0) {
+    performMovement();
+  }
+
+
+  velocity++;
+  // // Turn on one LED at a time with random color and specified snakeIntensity
+  // // Check if the sensor pin is HIGH
+  // if (sensorValueDown == HIGH) {
+  //   // Print a message to the Serial Monitor
+  //   Serial.println("High signal detected on pin Down!");
+  //   pressedDirection = 'D';
+  //   delay(15);  // Add a delay to avoid repeated messages (adjust as needed)
+  // } else if (sensorValueUp == HIGH) {
+  //   // Print a message to the Serial Monitor
+  //   Serial.println("High signal detected on Up!");
+  //   pressedDirection = 'U';
+  //   delay(15);  // Add a delay to avoid repeated messages (adjust as needed)
+  // } else if (sensorValueLeft == HIGH) {
+  //   // Print a message to the Serial Monitor
+  //   Serial.println("High signal detected on Left!");
+  //   pressedDirection = 'L';
+  //   delay(15);  // Add a delay to avoid repeated messages (adjust as needed)
+  // } else if (sensorValueRight == HIGH) {
+  //   // Print a message to the Serial Monitor
+  //   Serial.println("High signal detected on Right!");
+  //   pressedDirection = 'R';
+  //   delay(15);
+  // }
+
+  //przechodzi 20 razy zanim zacznie resetować pozycje x dlatego wchodzi zawsze w else if zanim wywoła if z movementem
+  //   if (movmentQueue[0] == 'x') {
+  //     movmentQueue[0] = pressedDirection;
+  //   } else if (movmentQueue[0] != pressedDirection) {
+  //     movmentQueue[1] = pressedDirection;
+  //   }
+
+  //   //to jest tragiczne..................................... o7
+  //   if (velocity % 5 == 0) {
+
+  //     if (movmentQueue[0] != 'x') {
+  //       setDirection(movmentQueue[0]);
+  //       performMovement();
+  //       movmentQueue[0] = 'x';
+  //     }
+
+  //     if (movmentQueue[1] != 'y') {
+  //       setDirection(movmentQueue[1]);
+  //       performMovement();
+  //       movmentQueue[1] = 'y';
+  //     }
+  //     velocity = 0;
+  //   }
+
+  //   velocity++;
 }
