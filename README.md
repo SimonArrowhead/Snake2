@@ -1,10 +1,10 @@
 **This project implements a classic Snake game using NeoPixel LEDs controlled by the Bluepad32 library. The game is played on a grid of NeoPixel LEDs, where the player controls the movement of a snake to eat food and grow longer. The game ends if the snake collides with itself or the boundaries of the grid.**
 
 ## Dependencies:
-Bluepad32: A library for interfacing with Bluetooth gamepads on ESP32 platforms.
-Adafruit NeoPixel: Library for controlling NeoPixel LEDs.
-Adafruit GFX: Core graphics library used by the NeoPixel library.
-Adafruit NeoMatrix: Library for controlling NeoMatrix grids of NeoPixels.
+- Bluepad32: A library for interfacing with Bluetooth gamepads on ESP32 platforms.
+- Adafruit NeoPixel: Library for controlling NeoPixel LEDs.
+- Adafruit GFX: Core graphics library used by the NeoPixel library.
+- Adafruit NeoMatrix: Library for controlling NeoMatrix grids of NeoPixels.
 
 ## Usage:
 Connect your NeoPixel LED strip or matrix to the designated pins on your ESP32 board.
