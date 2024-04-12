@@ -29,7 +29,7 @@ Game over detection for collision with the snake itself or grid boundaries.
 8. Enjoy playing the Snake game using the gamepad controls!
 
 ## Compatibility and Adjustments for Arduino:
-While this project is primarily designed for ESP32 boards due to their dual-core capabilities, it can also be adapted to work with Arduino boards. However, some adjustments are necessary, especially if using a smaller LED matrix.
+While this project is primarily designed for ESP32 boards due to their dual-core capabilities, it can also be adapted to work with Arduino boards. However, some adjustments are necessary.
 
 If using an Arduino board:
 - Note that the matrix size may need to be significantly smaller due to memory and processing constraints.
