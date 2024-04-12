@@ -1,4 +1,4 @@
-## This project implements a classic Snake game using NeoPixel LEDs controlled by the Bluepad32 library. The game is played on a grid of NeoPixel LEDs, where the player controls the movement of a snake to eat food and grow longer. The game ends if the snake collides with itself or the boundaries of the grid.
+**This project implements a classic Snake game using NeoPixel LEDs controlled by the Bluepad32 library. The game is played on a grid of NeoPixel LEDs, where the player controls the movement of a snake to eat food and grow longer. The game ends if the snake collides with itself or the boundaries of the grid.**
 
 ## Dependencies:
 Bluepad32: A library for interfacing with Bluetooth gamepads on ESP32 platforms.
