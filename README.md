@@ -34,6 +34,7 @@ While this project is primarily designed for ESP32 boards due to their dual-core
 If using an Arduino board:
 - Note that the matrix size may need to be significantly smaller due to memory and processing constraints.
 - Additionally, the border refreshing mechanism may need to be modified to ensure smooth operation on single-core Arduino boards.
+  
 Ensure to adjust the code accordingly and test thoroughly to achieve optimal performance on your Arduino board.
 
 ## License
