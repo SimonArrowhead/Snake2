@@ -28,6 +28,7 @@ Game over detection for collision with the snake itself or grid boundaries.
 7. Connect your Bluetooth gamepad to the Arduino or ESP32 board using the Bluepad library.
 8. Enjoy playing the Snake game using the gamepad controls!
 
-**Note:** This project uses the Bluepad32 library, which is free to use for open-source projects but requires a commercial license for closed-source projects (more info: https://github.com/ricardoquesada/bluepad32). Make sure to comply with the licensing terms when using this library in your project.
+## License
+This program is open source and licensed under the Apache License 2.0. You are free to modify and distribute the code under the terms of this license. However, please note that this project utilizes the Bluepad32 library, which in turn relies on the BTstack library. While BTstack is freely available for open-source projects, a commercial license is required for closed-source projects (more information: https://github.com/ricardoquesada/bluepad32). Ensure compliance with the licensing terms when incorporating this library into your project.
 
 
